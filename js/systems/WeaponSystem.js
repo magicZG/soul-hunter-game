@@ -60,7 +60,6 @@ export class WeaponSystem {
         return 0; // 未升级
     }
     
-    // 添加自动升级检查函数
     checkAutoUpgrade(soulPoints) {
         const nextWeaponIndex = this.currentWeapon + 1;
         
@@ -154,26 +153,26 @@ export class WeaponSystem {
             this.addElementalTrailEffect(bullet);
         }
         
-        // 根据武器类型设置子弹大小和速度
+        // 根据武器类型设置子弹大小和速度 - 放大子弹尺寸
         switch (weapon.bulletType) {
             case 'pistol':
-                bullet.setScale(0.5);
+                bullet.setScale(1.0);  // 从0.5放大到1.0
                 bullet.speed = 600;
                 break;
             case 'shotgun':
-                bullet.setScale(0.4);
+                bullet.setScale(0.8);  // 从0.4放大到0.8
                 bullet.speed = 550;
                 break;
             case 'rifle':
-                bullet.setScale(0.5);
+                bullet.setScale(1.0);  // 从0.5放大到1.0
                 bullet.speed = 700;
                 break;
             case 'sniper':
-                bullet.setScale(0.7);
+                bullet.setScale(1.4);  // 从0.7放大到1.4
                 bullet.speed = 800;
                 break;
             default:
-                bullet.setScale(0.5);
+                bullet.setScale(1.0);  // 从0.5放大到1.0
                 bullet.speed = 600;
         }
         
@@ -272,26 +271,26 @@ export class WeaponSystem {
             this.addElementalTrailEffect(bullet);
         }
         
-        // 根据武器类型设置子弹大小和速度
+        // 根据武器类型设置子弹大小和速度 - 放大子弹尺寸
         switch (weapon.bulletType) {
             case 'pistol':
-                bullet.setScale(0.5);
+                bullet.setScale(1.0);  // 从0.5放大到1.0
                 bullet.speed = 600;
                 break;
             case 'shotgun':
-                bullet.setScale(0.4);
+                bullet.setScale(0.8);  // 从0.4放大到0.8
                 bullet.speed = 550;
                 break;
             case 'rifle':
-                bullet.setScale(0.5);
+                bullet.setScale(1.0);  // 从0.5放大到1.0
                 bullet.speed = 700;
                 break;
             case 'sniper':
-                bullet.setScale(0.7);
+                bullet.setScale(1.4);  // 从0.7放大到1.4
                 bullet.speed = 800;
                 break;
             default:
-                bullet.setScale(0.5);
+                bullet.setScale(1.0);  // 从0.5放大到1.0
                 bullet.speed = 600;
         }
         
