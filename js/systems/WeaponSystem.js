@@ -8,7 +8,7 @@ export class WeaponSystem {
         this.weapons = weaponsConfig;
         this.bullets = scene.physics.add.group();
         this.lastFired = 0;
-        this.autoFire = false;
+        this.autoFire = true; // 默认开启自动射击
         this.targetEnemy = null;
         this.targetLine = null;
         
@@ -54,6 +54,46 @@ export class WeaponSystem {
             return cost; // 返回消耗的魂点
         }
         return 0; // 未升级
+    }
+    
+    // 添加自动升级检查函数
+    checkAutoUpgrade(soulPoints) {
+        const nextWeaponIndex = this.currentWeapon + 1;
+        
+        if (nextWeaponIndex < this.weapons.length && 
+            soulPoints >= this.weapons[nextWeaponIndex].unlockCost) {
+            
+            // 获取消耗的魂点
+            const cost = this.weapons[nextWeaponIndex].unlockCost;
+            const weaponName = this.weapons[nextWeaponIndex].name;
+            
+            // 升级到下一级武器
+            this.currentWeapon = nextWeaponIndex;
+            
+            // 升级特效
+            const upgradeEffect = this.scene.add.image(this.player.sprite.x, this.player.sprite.y, 'soul')
+                .setTint(this.weapons[this.currentWeapon].color)
+                .setScale(2)
+                .setAlpha(0.7);
+            
+            this.scene.tweens.add({
+                targets: upgradeEffect,
+                scale: 5,
+                alpha: 0,
+                duration: 800,
+                onComplete: function() {
+                    upgradeEffect.destroy();
+                }
+            });
+            
+            return {
+                success: true,
+                cost: cost,
+                weaponName: weaponName
+            };
+        }
+        
+        return { success: false };
     }
     
     fireBullet() {
@@ -253,35 +293,6 @@ export class WeaponSystem {
                 muzzleFlash.destroy();
             }
         });
-    }
-    
-    toggleAutoFire() {
-        this.autoFire = !this.autoFire;
-        
-        // 显示切换提示
-        const statusText = this.scene.add.text(
-            this.player.sprite.x, 
-            this.player.sprite.y - 50, 
-            '自动射击: ' + (this.autoFire ? '开启' : '关闭'), 
-            {
-                fontSize: '18px',
-                fill: this.autoFire ? '#00ff00' : '#ffffff',
-                stroke: '#000000',
-                strokeThickness: 3
-            }
-        ).setOrigin(0.5);
-        
-        this.scene.tweens.add({
-            targets: statusText,
-            y: this.player.sprite.y - 100,
-            alpha: 0,
-            duration: 1000,
-            onComplete: function() {
-                statusText.destroy();
-            }
-        });
-        
-        return this.autoFire;
     }
     
     update(time, enemies) {

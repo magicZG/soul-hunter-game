@@ -1,4 +1,3 @@
-// js/systems/InputManager.js
 export class InputManager {
     constructor(scene, player, weaponSystem, uiManager) {
         this.scene = scene;
@@ -20,19 +19,6 @@ export class InputManager {
             left: 'A',
             down: 'S',
             right: 'D'
-        });
-        
-        // 单次触发的按键设置
-        this.keyJ = this.scene.input.keyboard.addKey('J');
-        this.keyK = this.scene.input.keyboard.addKey('K');
-        this.keyL = this.scene.input.keyboard.addKey('L');
-        
-        this.scene.input.keyboard.on('keydown-J', () => {
-            this.uiManager.upgradeWeapon();
-        });
-        
-        this.scene.input.keyboard.on('keydown-K', () => {
-            this.uiManager.toggleAutoFire();
         });
         
         // 虚拟摇杆控制
@@ -95,15 +81,8 @@ export class InputManager {
             this.player.sprite.flipX = false;
         }
         
-        // 键盘射击
-        if (this.keyL.isDown) {
-            this.weaponSystem.fireBullet();
-        }
-        
-        // 如果使用键盘控制
+        // 如果使用键盘控制且有按键按下
         if (keyboardMoving) {
-            this.isUsingKeyboard = true;
-            
             // 归一化向量(防止对角线移动更快)
             if (dx !== 0 && dy !== 0) {
                 const length = Math.sqrt(dx * dx + dy * dy);
@@ -122,8 +101,6 @@ export class InputManager {
         }
         // 虚拟摇杆控制(移动设备)
         else if (this.joystick.isBeingDragged) {
-            this.isUsingKeyboard = false;
-            
             // 计算距离和方向
             dx = this.joystick.x - this.joystick.baseX;
             dy = this.joystick.y - this.joystick.baseY;
@@ -143,8 +120,9 @@ export class InputManager {
             if (magnitude > 10) {
                 this.player.sprite.flipX = dx < 0;
             }
-        } else if (!this.isUsingKeyboard) {
-            // 没有输入，停止移动
+        }
+        else {
+            // 没有任何输入时，停止移动
             this.player.sprite.setVelocity(0, 0);
         }
     }
@@ -168,9 +146,6 @@ export class InputManager {
 
             // 保存指针ID以追踪这个触摸点
             this.joystick.pointerId = pointer.id;
-            
-            // 切换到触摸控制
-            this.isUsingKeyboard = false;
         }
     }
     
@@ -196,9 +171,6 @@ export class InputManager {
                 this.joystick.x = this.joystick.baseX + Math.cos(angle) * this.joystick.radius;
                 this.joystick.y = this.joystick.baseY + Math.sin(angle) * this.joystick.radius;
             }
-            
-            // 切换到触摸控制
-            this.isUsingKeyboard = false;
         }
     }
     

@@ -63,6 +63,16 @@ export class GameScene extends Phaser.Scene {
         this.itemSystem.update(time, this.soulPoints);
         this.uiManager.update();
         
+        // 检查是否可以自动升级武器
+        const upgradeResult = this.weaponSystem.checkAutoUpgrade(this.soulPoints);
+        if (upgradeResult.success) {
+            // 扣除升级费用
+            this.soulPoints -= upgradeResult.cost;
+            this.uiManager.updateSoulPoints(this.soulPoints);
+            this.uiManager.updateWeaponText();
+            this.uiManager.showWeaponUpgradeNotification(upgradeResult.weaponName);
+        }
+        
         // 检查游戏是否结束
         if (this.player.health <= 0 && !this.gameOver) {
             this.gameOver = true;
