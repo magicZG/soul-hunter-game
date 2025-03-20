@@ -14,6 +14,7 @@ export class UIManager {
         this.elementText = null;
         this.skillsText = null;
         this.skillButtonsGroup = null;
+        this.enemyDirectionArrows = []; // 新增：敌人方向箭头数组
         
         // 创建UI元素
         this.createUI();
@@ -90,10 +91,141 @@ export class UIManager {
         // 初始化技能按钮
         this.createSkillButtons();
         
+        // 初始化敌人方向指示箭头
+        this.createDirectionArrows();
+        
         // 初始化UI状态
         this.updateHealthBar();
         this.updateWeaponText();
         this.updateSkillsText();
+    }
+    
+    // 新增：创建敌人方向指示箭头
+    createDirectionArrows() {
+        // 清除旧箭头
+        this.enemyDirectionArrows.forEach(arrow => arrow.destroy());
+        this.enemyDirectionArrows = [];
+        
+        // 创建5个方向指示箭头（可以同时显示5个敌人方向）
+        for (let i = 0; i < 5; i++) {
+            const arrow = this.scene.add.image(0, 0, 'directionArrow')
+                .setScrollFactor(0)
+                .setScale(1.2)
+                .setAlpha(0.8)
+                .setDepth(1100)
+                .setVisible(false);
+            
+            this.enemyDirectionArrows.push(arrow);
+        }
+    }
+    
+    // 新增：更新敌人方向指示箭头
+    updateDirectionArrows() {
+        if (!this.scene.enemyManager || !this.player || !this.player.sprite) {
+            return;
+        }
+        
+        // 获取所有敌人
+        const enemies = this.scene.enemyManager.enemies.getChildren();
+        if (!enemies || enemies.length === 0) {
+            // 隐藏所有箭头
+            this.enemyDirectionArrows.forEach(arrow => arrow.setVisible(false));
+            return;
+        }
+        
+        // 获取屏幕边界
+        const camera = this.scene.cameras.main;
+        const screenBounds = new Phaser.Geom.Rectangle(
+            camera.scrollX,
+            camera.scrollY,
+            camera.width,
+            camera.height
+        );
+        
+        // 筛选出在屏幕外的敌人，并按距离排序
+        const offScreenEnemies = enemies
+            .filter(enemy => !screenBounds.contains(enemy.x, enemy.y))
+            .map(enemy => {
+                return {
+                    enemy: enemy,
+                    distance: Phaser.Math.Distance.Between(
+                        this.player.sprite.x,
+                        this.player.sprite.y,
+                        enemy.x,
+                        enemy.y
+                    )
+                };
+            })
+            .sort((a, b) => a.distance - b.distance)
+            .slice(0, this.enemyDirectionArrows.length); // 只处理最近的几个敌人
+        
+        // 隐藏所有箭头
+        this.enemyDirectionArrows.forEach(arrow => arrow.setVisible(false));
+        
+        // 对每个屏幕外的敌人更新箭头
+        offScreenEnemies.forEach((enemyData, index) => {
+            const arrow = this.enemyDirectionArrows[index];
+            const enemy = enemyData.enemy;
+            
+            // 计算敌人相对于屏幕中心的角度
+            const angle = Phaser.Math.Angle.Between(
+                camera.midPoint.x,
+                camera.midPoint.y,
+                enemy.x,
+                enemy.y
+            );
+            
+            // 计算箭头位置（固定在屏幕边缘）
+            const radius = Math.min(camera.width, camera.height) * 0.4;
+            let arrowX = camera.midPoint.x + Math.cos(angle) * radius;
+            let arrowY = camera.midPoint.y + Math.sin(angle) * radius;
+            
+            // 保证箭头在屏幕内
+            const padding = 30;
+            arrowX = Phaser.Math.Clamp(arrowX, camera.scrollX + padding, camera.scrollX + camera.width - padding);
+            arrowY = Phaser.Math.Clamp(arrowY, camera.scrollY + padding, camera.scrollY + camera.height - padding);
+            
+            // 根据敌人类型设置箭头颜色
+            if (enemy.enemyType === 'boss') {
+                arrow.setTint(0xff0000); // Boss红色
+                arrow.setScale(1.8);     // 更大的箭头
+            } else if (enemy.enemyType === 'elite') {
+                arrow.setTint(0xff8800); // 精英橙色
+                arrow.setScale(1.5);
+            } else if (enemy.enemyType === 'healer') {
+                arrow.setTint(0xff00ff); // 治疗粉色
+                arrow.setScale(1.2);
+            } else {
+                arrow.setTint(0xffff00); // 普通敌人黄色
+                arrow.setScale(1.2);
+            }
+            
+            // 设置箭头位置和旋转
+            arrow.setPosition(arrowX, arrowY);
+            arrow.setRotation(angle);
+            arrow.setVisible(true);
+            
+            // 根据敌人距离设置透明度
+            const maxDistance = 1500;
+            const minAlpha = 0.4;
+            const alphaRange = 0.6; // 0.4 - 1.0
+            
+            const distanceRatio = Phaser.Math.Clamp(enemyData.distance / maxDistance, 0, 1);
+            const alpha = 1.0 - (distanceRatio * alphaRange);
+            arrow.setAlpha(alpha);
+            
+            // 为Boss添加脉动效果
+            if (enemy.enemyType === 'boss' && !arrow.pulseTween) {
+                arrow.pulseTween = this.scene.tweens.add({
+                    targets: arrow,
+                    scaleX: 2.2,
+                    scaleY: 2.2,
+                    duration: 600,
+                    yoyo: true,
+                    repeat: -1
+                });
+            }
+        });
     }
     
     // 创建技能按钮
@@ -396,5 +528,8 @@ export class UIManager {
                 this.scene.waveSystem.getEnemiesRemaining()
             );
         }
+        
+        // 更新敌人方向箭头
+        this.updateDirectionArrows();
     }
 }

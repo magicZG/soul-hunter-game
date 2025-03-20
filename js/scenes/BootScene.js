@@ -44,8 +44,28 @@ export class BootScene extends Phaser.Scene {
         this.createRectTexture('trap', 16, 16, 0xff0000);
         this.createRectTexture('chest', 32, 32, 0xffdd00);
         
+        // 创建敌人方向指示箭头
+        this.createArrowTexture('directionArrow', 20, 0xffff00);
+        
         // 创建精灵表 - 为敌人动画创建多帧
         this.createEnemySpriteSheet();
+    }
+    
+    // 新增：创建箭头纹理
+    createArrowTexture(key, size, color) {
+        const graphics = this.make.graphics();
+        graphics.fillStyle(color);
+        
+        // 绘制一个简单的三角形箭头
+        graphics.beginPath();
+        graphics.moveTo(size, 0);         // 箭头尖端
+        graphics.lineTo(-size/2, -size/2); // 箭头左边
+        graphics.lineTo(-size/2, size/2);  // 箭头右边
+        graphics.closePath();
+        graphics.fillPath();
+        
+        graphics.generateTexture(key, size * 1.5, size);
+        graphics.clear();
     }
     
     createCircleTexture(key, radius, color) {

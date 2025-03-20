@@ -15,39 +15,39 @@ export class EnemyManager {
         this.currentWave = 0;
         this.enemiesRemaining = 0;
         
-        // 特殊敌人类型配置
+        // 特殊敌人类型配置 - 已加强敌人能力
         this.enemyTypes = [
             // 普通敌人
             {
                 type: 'normal',
-                health: 3,
+                health: 5,
                 scale: 1.0,
-                speed: 100,
-                damage: 15,
+                speed: 120,
+                damage: 20,
                 color: 0xffffff,
                 spawnWeight: 70
             },
             // 爆炸型敌人
             {
                 type: 'explosive',
-                health: 2,
+                health: 4,
                 scale: 0.9,
-                speed: 120,
-                damage: 15,
+                speed: 140,
+                damage: 20,
                 color: 0xff5500,
                 spawnWeight: 5,
                 onDeath: (enemy) => {
                     // 死亡时爆炸，对周围造成伤害
-                    this.createExplosion(enemy.x, enemy.y, 150, 20, new Set([enemy]));
+                    this.createExplosion(enemy.x, enemy.y, 150, 25, new Set([enemy]));
                 }
             },
             // 分裂型敌人
             {
                 type: 'splitter',
-                health: 5,
+                health: 7,
                 scale: 1.2,
-                speed: 80,
-                damage: 20,
+                speed: 100,
+                damage: 25,
                 color: 0x00ff00,
                 spawnWeight: 5,
                 onDeath: (enemy) => {
@@ -56,7 +56,7 @@ export class EnemyManager {
                         const offset = (i === 0 ? -1 : 1) * 20;
                         const smallEnemy = this.spawnEnemyAt(enemy.x + offset, enemy.y + offset, 'normal', 0.7);
                         if (smallEnemy) {
-                            smallEnemy.health = 1;
+                            smallEnemy.health = 2;
                             smallEnemy.scale = 0.7;
                             smallEnemy.setTint(0x00ff00); // 保持与父敌人相同的颜色
                         }
@@ -66,10 +66,10 @@ export class EnemyManager {
             // 精英型敌人
             {
                 type: 'elite',
-                health: 10,
+                health: 15,
                 scale: 1.3,
-                speed: 90,
-                damage: 25,
+                speed: 110,
+                damage: 30,
                 color: 0xff8800,
                 spawnWeight: 10,
                 attackType: 'range', // 远程攻击
@@ -78,10 +78,10 @@ export class EnemyManager {
             // 隐形型敌人
             {
                 type: 'invisible',
-                health: 3,
+                health: 4,
                 scale: 1.0,
-                speed: 110,
-                damage: 15,
+                speed: 130,
+                damage: 20,
                 color: 0xffffff,
                 spawnWeight: 5,
                 behavior: (enemy, time) => {
@@ -96,10 +96,10 @@ export class EnemyManager {
             // 治疗型敌人
             {
                 type: 'healer',
-                health: 5,
+                health: 8,
                 scale: 1.1,
-                speed: 70,
-                damage: 10,
+                speed: 90,
+                damage: 15,
                 color: 0xff00ff,
                 spawnWeight: 5,
                 behavior: (enemy, time) => {
@@ -118,10 +118,10 @@ export class EnemyManager {
             // Boss敌人
             {
                 type: 'boss',
-                health: 50,
+                health: 80, // 提高boss生命值
                 scale: 2.0,
-                speed: 70,
-                damage: 40,
+                speed: 80,
+                damage: 50,
                 color: 0xff0000,
                 spawnWeight: 0, // 不随机生成，仅在特定场景生成
                 attackType: 'teleport', // 瞬移攻击

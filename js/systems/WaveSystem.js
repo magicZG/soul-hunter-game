@@ -13,7 +13,7 @@ export class WaveSystem {
         
         // 波次计时器
         this.waveTimer = 0;
-        this.waveCooldown = 10000; // 波次之间的间隔时间(ms)
+        this.waveCooldown = 2000; // 波次之间的间隔时间(ms) - 已从10000改为2000
         this.waveStarted = false;
         
         try {
