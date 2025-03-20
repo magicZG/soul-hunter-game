@@ -28,6 +28,11 @@ export class CollisionManager {
     
     bulletHitEnemy(bullet, enemy) {
         try {
+            // 设置一个显式的错误处理边界
+            if (!enemy || !enemy.active || !bullet || !bullet.active) {
+                return;
+            }
+            
             // 减少敌人生命值，考虑武器伤害
             const isDead = this.scene.enemyManager.damageEnemy(enemy, bullet.damage || 1);
 

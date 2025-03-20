@@ -118,50 +118,71 @@ export class BootScene extends Phaser.Scene {
     
     createAnimations() {
         try {
-            // 创建敌人动画
-            this.anims.create({
-                key: 'enemyWalk',
-                frames: this.anims.generateFrameNumbers('enemy', { start: 0, end: 3 }),
-                frameRate: 8,
-                repeat: -1
-            });
+            // 创建敌人走路动画 - 更安全的方式
+            if (!this.anims.exists('enemyWalk')) {
+                this.anims.create({
+                    key: 'enemyWalk',
+                    frames: this.anims.generateFrameNumbers('enemy', { start: 0, end: 3 }),
+                    frameRate: 8,
+                    repeat: -1
+                });
+                console.log("成功创建enemyWalk动画");
+            }
             
-            this.anims.create({
-                key: 'enemyWalkLeft',
-                frames: this.anims.generateFrameNumbers('enemy', { start: 0, end: 3 }),
-                frameRate: 10,
-                repeat: -1
-            });
+            if (!this.anims.exists('enemyWalkLeft')) {
+                this.anims.create({
+                    key: 'enemyWalkLeft',
+                    frames: this.anims.generateFrameNumbers('enemy', { start: 0, end: 3 }),
+                    frameRate: 10,
+                    repeat: -1
+                });
+                console.log("成功创建enemyWalkLeft动画");
+            }
             
-            this.anims.create({
-                key: 'enemyWalkRight',
-                frames: this.anims.generateFrameNumbers('enemy', { start: 5, end: 8 }),
-                frameRate: 10,
-                repeat: -1
-            });
+            if (!this.anims.exists('enemyWalkRight')) {
+                this.anims.create({
+                    key: 'enemyWalkRight',
+                    frames: this.anims.generateFrameNumbers('enemy', { start: 5, end: 8 }),
+                    frameRate: 10,
+                    repeat: -1
+                });
+                console.log("成功创建enemyWalkRight动画");
+            }
         } catch (error) {
             console.error("Error creating animations:", error);
-            // 创建备用动画
-            this.anims.create({
-                key: 'enemyWalk',
-                frames: [{ key: 'enemy', frame: 0 }],
-                frameRate: 1,
-                repeat: -1
-            });
             
-            this.anims.create({
-                key: 'enemyWalkLeft',
-                frames: [{ key: 'enemy', frame: 0 }],
-                frameRate: 1,
-                repeat: -1
-            });
-            
-            this.anims.create({
-                key: 'enemyWalkRight',
-                frames: [{ key: 'enemy', frame: 0 }],
-                frameRate: 1,
-                repeat: -1
-            });
+            // 创建简单的后备动画
+            try {
+                if (!this.anims.exists('enemyWalk')) {
+                    this.anims.create({
+                        key: 'enemyWalk',
+                        frames: [{ key: 'enemy', frame: 0 }],
+                        frameRate: 1,
+                        repeat: 0
+                    });
+                }
+                
+                if (!this.anims.exists('enemyWalkLeft')) {
+                    this.anims.create({
+                        key: 'enemyWalkLeft',
+                        frames: [{ key: 'enemy', frame: 0 }],
+                        frameRate: 1,
+                        repeat: 0
+                    });
+                }
+                
+                if (!this.anims.exists('enemyWalkRight')) {
+                    this.anims.create({
+                        key: 'enemyWalkRight',
+                        frames: [{ key: 'enemy', frame: 0 }],
+                        frameRate: 1,
+                        repeat: 0
+                    });
+                }
+                console.log("已创建后备动画");
+            } catch (e) {
+                console.error("创建后备动画失败:", e.message);
+            }
         }
     }
 }

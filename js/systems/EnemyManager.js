@@ -38,7 +38,7 @@ export class EnemyManager {
                 spawnWeight: 5,
                 onDeath: (enemy) => {
                     // 死亡时爆炸，对周围造成伤害
-                    this.createExplosion(enemy.x, enemy.y, 150, 20);
+                    this.createExplosion(enemy.x, enemy.y, 150, 20, new Set([enemy]));
                 }
             },
             // 分裂型敌人
@@ -178,6 +178,17 @@ export class EnemyManager {
                 });
             } catch (e) {
                 console.warn("创建enemyWalkLeft动画失败:", e.message);
+                // 创建后备动画
+                try {
+                    this.scene.anims.create({
+                        key: 'enemyWalkLeft',
+                        frames: [ { key: 'enemy', frame: 0 } ],
+                        frameRate: 1,
+                        repeat: 0
+                    });
+                } catch (e) {
+                    console.error("创建备用enemyWalkLeft动画也失败:", e.message);
+                }
             }
         }
 
@@ -191,6 +202,17 @@ export class EnemyManager {
                 });
             } catch (e) {
                 console.warn("创建enemyWalkRight动画失败:", e.message);
+                // 创建后备动画
+                try {
+                    this.scene.anims.create({
+                        key: 'enemyWalkRight',
+                        frames: [ { key: 'enemy', frame: 0 } ],
+                        frameRate: 1,
+                        repeat: 0
+                    });
+                } catch (e) {
+                    console.error("创建备用enemyWalkRight动画也失败:", e.message);
+                }
             }
         }
     }
@@ -330,26 +352,27 @@ export class EnemyManager {
         return enemy;
     }
     
-    // 新增: 安全播放敌人动画的方法
+    // 修改: 安全播放敌人动画的方法
     playEnemyAnimation(enemy, animationKey) {
-        // 检查动画是否存在
-        if (this.scene.anims.exists(animationKey)) {
-            try {
-                enemy.play(animationKey);
-            } catch (e) {
-                console.warn(`播放动画 ${animationKey} 失败:`, e.message);
-                // 发生错误时设置为默认帧
-                try {
-                    enemy.setTexture('enemy', 0);
-                } catch (err) {
-                    console.error("无法设置默认帧:", err.message);
-                }
-            }
-        } else {
-            console.warn(`动画 ${animationKey} 不存在，使用静态图像`);
-            try {
+        // 确保enemy存在且具有必要属性
+        if (!enemy || !enemy.anims) {
+            return;
+        }
+        
+        try {
+            // 检查动画是否存在
+            if (this.scene.anims.exists(animationKey)) {
+                enemy.play(animationKey, true); // 添加true参数忽略重复播放
+            } else {
+                console.warn(`动画 ${animationKey} 不存在，使用静态图像`);
                 // 设置为默认帧
-                enemy.setTexture('enemy', 0);
+                enemy.setFrame(0);
+            }
+        } catch (e) {
+            console.warn(`播放动画 ${animationKey} 失败:`, e.message);
+            try {
+                // 发生错误时设置为默认帧
+                enemy.setFrame(0);
             } catch (err) {
                 console.error("无法设置默认帧:", err.message);
             }
@@ -393,9 +416,14 @@ export class EnemyManager {
     }
     
     updateEnemyBehavior(enemy, time) {
-        // 修改: 安全地检查动画状态
-        if (enemy.anims && !enemy.anims.isPlaying) {
-            this.playEnemyAnimation(enemy, 'enemyWalk');
+        // 安全地检查动画状态
+        try {
+            if (enemy.anims) {
+                // 尝试播放动画，但做好错误处理
+                this.playEnemyAnimation(enemy, 'enemyWalk');
+            }
+        } catch (e) {
+            console.warn("更新敌人动画时出错:", e.message);
         }
 
         // 简单的追踪AI
@@ -405,26 +433,32 @@ export class EnemyManager {
         );
 
         if (distance < 500) {
-            let speed = enemy.typeConfig.speed || 100;
+            let speed = enemy.typeConfig ? enemy.typeConfig.speed || 100 : 100;
 
             // 计算方向向量
             const dx = this.player.sprite.x - enemy.x;
             const dy = this.player.sprite.y - enemy.y;
             const magnitude = Math.sqrt(dx * dx + dy * dy);
 
-            // 移动敌人朝向玩家
-            enemy.body.setVelocity(
-                dx / magnitude * speed,
-                dy / magnitude * speed
-            );
+            // 避免除以零
+            if (magnitude > 0) {
+                // 移动敌人朝向玩家
+                enemy.body.setVelocity(
+                    dx / magnitude * speed,
+                    dy / magnitude * speed
+                );
 
-            // 修改: 安全地设置敌人朝向和动画
-            if (dx < 0) {
-                this.playEnemyAnimation(enemy, 'enemyWalkLeft');
-                enemy.flipX = true;
-            } else {
-                this.playEnemyAnimation(enemy, 'enemyWalkRight');
-                enemy.flipX = false;
+                // 安全地设置敌人朝向和动画
+                try {
+                    enemy.flipX = dx < 0;
+                    if (dx < 0) {
+                        this.playEnemyAnimation(enemy, 'enemyWalkLeft');
+                    } else {
+                        this.playEnemyAnimation(enemy, 'enemyWalkRight');
+                    }
+                } catch (e) {
+                    console.warn("设置敌人动画朝向时出错:", e.message);
+                }
             }
 
             // 精英敌人的特殊行为
@@ -465,12 +499,16 @@ export class EnemyManager {
             enemy.body.setVelocity(enemy.wanderVelocityX, enemy.wanderVelocityY);
             
             // 修改: 安全地设置敌人漫游动画
-            if (enemy.wanderVelocityX < 0) {
-                this.playEnemyAnimation(enemy, 'enemyWalkLeft');
-                enemy.flipX = true;
-            } else {
-                this.playEnemyAnimation(enemy, 'enemyWalkRight');
-                enemy.flipX = false;
+            try {
+                if (enemy.wanderVelocityX < 0) {
+                    this.playEnemyAnimation(enemy, 'enemyWalkLeft');
+                    enemy.flipX = true;
+                } else {
+                    this.playEnemyAnimation(enemy, 'enemyWalkRight');
+                    enemy.flipX = false;
+                }
+            } catch (e) {
+                console.warn("设置敌人漫游动画时出错:", e.message);
             }
         }
     }
@@ -667,7 +705,7 @@ export class EnemyManager {
         }
     }
     
-    createExplosion(x, y, radius, damage) {
+    createExplosion(x, y, radius, damage, processedEnemies = new Set()) {
         // 视觉效果 - 爆炸圆环
         const explosionCircle = this.scene.add.circle(x, y, radius, 0xff5500, 0.3);
         
@@ -685,7 +723,11 @@ export class EnemyManager {
         // 对范围内的其他敌人也造成伤害
         const nearbyEnemies = this.getNearbyEnemies(x, y, radius);
         nearbyEnemies.forEach(nearbyEnemy => {
-            this.damageEnemy(nearbyEnemy, damage / 2); // 对其他敌人造成一半伤害
+            // 添加此检查，避免无限递归
+            if (!processedEnemies.has(nearbyEnemy)) {
+                processedEnemies.add(nearbyEnemy);
+                this.damageEnemy(nearbyEnemy, damage / 2); // 对其他敌人造成一半伤害
+            }
         });
         
         // 爆炸动画
