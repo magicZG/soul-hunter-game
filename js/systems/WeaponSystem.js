@@ -12,6 +12,10 @@ export class WeaponSystem {
         this.targetEnemy = null;
         this.targetLine = null;
         
+        // 伤害和冷却修饰符
+        this.damageMultiplier = 1.0;
+        this.cooldownMultiplier = 1.0;
+        
         this.init();
     }
     
@@ -98,6 +102,9 @@ export class WeaponSystem {
     
     fireBullet() {
         const now = this.scene.time.now;
+        // 应用冷却时间修饰符
+        const adjustedFireRate = this.getCurrentWeapon().fireRate * this.cooldownMultiplier;
+        
         if (now > this.lastFired) {
             const weapon = this.getCurrentWeapon();
             
@@ -111,7 +118,7 @@ export class WeaponSystem {
                 this.createBullet(0);
             }
             
-            this.lastFired = now + weapon.fireRate;
+            this.lastFired = now + adjustedFireRate;
             return true;
         }
         return false;
@@ -135,8 +142,17 @@ export class WeaponSystem {
         // 设置子弹属性
         bullet.setActive(true);
         bullet.setVisible(true);
-        bullet.damage = weapon.damage;
+        bullet.damage = Math.round(weapon.damage * this.damageMultiplier); // 应用伤害修饰符
         bullet.setTint(weapon.color);
+        
+        // 如果有元素效果，添加到子弹上
+        if (this.scene.elementSystem && this.scene.elementSystem.getActiveElement()) {
+            bullet.element = this.scene.elementSystem.getActiveElement();
+            bullet.setTint(bullet.element.color);
+            
+            // 添加粒子尾迹效果
+            this.addElementalTrailEffect(bullet);
+        }
         
         // 根据武器类型设置子弹大小和速度
         switch (weapon.bulletType) {
@@ -198,6 +214,32 @@ export class WeaponSystem {
                 muzzleFlash.destroy();
             }
         });
+        
+        return bullet;
+    }
+    
+    addElementalTrailEffect(bullet) {
+        if (!bullet.element) return;
+        
+        const emitter = this.scene.add.particles(0, 0, 'particle', {
+            tint: bullet.element.particleColor,
+            scale: { start: 0.2, end: 0.05 },
+            alpha: { start: 0.5, end: 0 },
+            speed: 5,
+            lifespan: 300,
+            frequency: 15,
+            follow: bullet
+        });
+        
+        // 存储在子弹上，以便后续销毁
+        bullet.trailEmitter = emitter;
+        
+        // 当子弹被销毁时，清理粒子发射器
+        bullet.on('destroy', () => {
+            if (bullet.trailEmitter) {
+                bullet.trailEmitter.destroy();
+            }
+        });
     }
     
     fireAutoTargetBullet(target, angleOffset) {
@@ -218,8 +260,17 @@ export class WeaponSystem {
         // 设置子弹属性
         bullet.setActive(true);
         bullet.setVisible(true);
-        bullet.damage = weapon.damage;
+        bullet.damage = Math.round(weapon.damage * this.damageMultiplier); // 应用伤害修饰符
         bullet.setTint(weapon.color);
+        
+        // 如果有元素效果，添加到子弹上
+        if (this.scene.elementSystem && this.scene.elementSystem.getActiveElement()) {
+            bullet.element = this.scene.elementSystem.getActiveElement();
+            bullet.setTint(bullet.element.color);
+            
+            // 添加粒子尾迹效果
+            this.addElementalTrailEffect(bullet);
+        }
         
         // 根据武器类型设置子弹大小和速度
         switch (weapon.bulletType) {
@@ -293,6 +344,37 @@ export class WeaponSystem {
                 muzzleFlash.destroy();
             }
         });
+        
+        return bullet;
+    }
+    
+    toggleAutoFire() {
+        this.autoFire = !this.autoFire;
+        
+        // 显示切换提示
+        const statusText = this.scene.add.text(
+            this.player.sprite.x, 
+            this.player.sprite.y - 50, 
+            '自动射击: ' + (this.autoFire ? '开启' : '关闭'), 
+            {
+                fontSize: '18px',
+                fill: this.autoFire ? '#00ff00' : '#ffffff',
+                stroke: '#000000',
+                strokeThickness: 3
+            }
+        ).setOrigin(0.5);
+        
+        this.scene.tweens.add({
+            targets: statusText,
+            y: this.player.sprite.y - 100,
+            alpha: 0,
+            duration: 1000,
+            onComplete: function() {
+                statusText.destroy();
+            }
+        });
+        
+        return this.autoFire;
     }
     
     update(time, enemies) {
@@ -332,6 +414,8 @@ export class WeaponSystem {
                     .setPosition(this.player.sprite.x, this.player.sprite.y)
                     .setTo(0, 0, this.targetEnemy.x - this.player.sprite.x, this.targetEnemy.y - this.player.sprite.y);
 
+                // 应用冷却时间修饰符
+                const adjustedFireRate = weapon.fireRate * this.cooldownMultiplier;
                 // 自动开火
                 if (time > this.lastFired) {
                     // 霰弹枪发射多发子弹
@@ -344,7 +428,7 @@ export class WeaponSystem {
                         this.fireAutoTargetBullet(this.targetEnemy, 0);
                     }
                     
-                    this.lastFired = time + weapon.fireRate;
+                    this.lastFired = time + adjustedFireRate;
                 }
             } else {
                 // 没有目标时隐藏目标线
@@ -422,5 +506,61 @@ export class WeaponSystem {
             return true;
         }
         return false;
+    }
+    
+    // 增加伤害修饰符
+    increaseDamageMultiplier(multiplier) {
+        this.damageMultiplier *= multiplier;
+        
+        // 显示伤害提升效果
+        const damageText = this.scene.add.text(
+            this.player.sprite.x, 
+            this.player.sprite.y - 50, 
+            `伤害提升 ${Math.floor((multiplier - 1) * 100)}%!`, 
+            {
+                fontSize: '20px',
+                fill: '#ff6666',
+                stroke: '#000000',
+                strokeThickness: 3
+            }
+        ).setOrigin(0.5);
+        
+        this.scene.tweens.add({
+            targets: damageText,
+            y: this.player.sprite.y - 100,
+            alpha: 0,
+            duration: 1500,
+            onComplete: function() {
+                damageText.destroy();
+            }
+        });
+    }
+    
+    // 减少冷却时间修饰符
+    decreaseCooldownMultiplier(multiplier) {
+        this.cooldownMultiplier *= multiplier; // 注意：这是乘法，因为multiplier小于1会减少冷却时间
+        
+        // 显示冷却提升效果
+        const cooldownText = this.scene.add.text(
+            this.player.sprite.x, 
+            this.player.sprite.y - 50, 
+            `冷却时间减少 ${Math.floor((1 - multiplier) * 100)}%!`, 
+            {
+                fontSize: '20px',
+                fill: '#66ccff',
+                stroke: '#000000',
+                strokeThickness: 3
+            }
+        ).setOrigin(0.5);
+        
+        this.scene.tweens.add({
+            targets: cooldownText,
+            y: this.player.sprite.y - 100,
+            alpha: 0,
+            duration: 1500,
+            onComplete: function() {
+                cooldownText.destroy();
+            }
+        });
     }
 }

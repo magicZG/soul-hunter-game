@@ -9,9 +9,245 @@ export class EnemyManager {
         });
         
         this.spawnTime = 0;
+        this.killedEnemiesCount = 0;
+        this.totalKilledEnemies = 0;
+        this.waveActive = false;
+        this.currentWave = 0;
+        this.enemiesRemaining = 0;
+        
+        // 特殊敌人类型配置
+        this.enemyTypes = [
+            // 普通敌人
+            {
+                type: 'normal',
+                health: 3,
+                scale: 1.0,
+                speed: 100,
+                damage: 15,
+                color: 0xffffff,
+                spawnWeight: 70
+            },
+            // 爆炸型敌人
+            {
+                type: 'explosive',
+                health: 2,
+                scale: 0.9,
+                speed: 120,
+                damage: 15,
+                color: 0xff5500,
+                spawnWeight: 5,
+                onDeath: (enemy) => {
+                    // 死亡时爆炸，对周围造成伤害
+                    this.createExplosion(enemy.x, enemy.y, 150, 20);
+                }
+            },
+            // 分裂型敌人
+            {
+                type: 'splitter',
+                health: 5,
+                scale: 1.2,
+                speed: 80,
+                damage: 20,
+                color: 0x00ff00,
+                spawnWeight: 5,
+                onDeath: (enemy) => {
+                    // 死亡时分裂为2个小型敌人
+                    for (let i = 0; i < 2; i++) {
+                        const offset = (i === 0 ? -1 : 1) * 20;
+                        const smallEnemy = this.spawnEnemyAt(enemy.x + offset, enemy.y + offset, 'normal', 0.7);
+                        if (smallEnemy) {
+                            smallEnemy.health = 1;
+                            smallEnemy.scale = 0.7;
+                            smallEnemy.setTint(0x00ff00); // 保持与父敌人相同的颜色
+                        }
+                    }
+                }
+            },
+            // 精英型敌人
+            {
+                type: 'elite',
+                health: 10,
+                scale: 1.3,
+                speed: 90,
+                damage: 25,
+                color: 0xff8800,
+                spawnWeight: 10,
+                attackType: 'range', // 远程攻击
+                attackInterval: 2000 // 攻击间隔
+            },
+            // 隐形型敌人
+            {
+                type: 'invisible',
+                health: 3,
+                scale: 1.0,
+                speed: 110,
+                damage: 15,
+                color: 0xffffff,
+                spawnWeight: 5,
+                behavior: (enemy, time) => {
+                    // 周期性隐形
+                    if ((time % 5000) < 2000) {
+                        enemy.alpha = 0.2;
+                    } else {
+                        enemy.alpha = 1;
+                    }
+                }
+            },
+            // 治疗型敌人
+            {
+                type: 'healer',
+                health: 5,
+                scale: 1.1,
+                speed: 70,
+                damage: 10,
+                color: 0xff00ff,
+                spawnWeight: 5,
+                behavior: (enemy, time) => {
+                    // 周期性治疗附近敌人
+                    if (time % 3000 < 50) {
+                        const nearbyEnemies = this.getNearbyEnemies(enemy.x, enemy.y, 100, 3, [enemy]);
+                        nearbyEnemies.forEach(nearbyEnemy => {
+                            if (nearbyEnemy.health < nearbyEnemy.maxHealth) {
+                                nearbyEnemy.health = Math.min(nearbyEnemy.maxHealth, nearbyEnemy.health + 1);
+                                this.createHealEffect(enemy.x, enemy.y, nearbyEnemy.x, nearbyEnemy.y);
+                            }
+                        });
+                    }
+                }
+            },
+            // Boss敌人
+            {
+                type: 'boss',
+                health: 50,
+                scale: 2.0,
+                speed: 70,
+                damage: 40,
+                color: 0xff0000,
+                spawnWeight: 0, // 不随机生成，仅在特定场景生成
+                attackType: 'teleport', // 瞬移攻击
+                attackInterval: 4000, // 攻击间隔
+                onDeath: (enemy) => {
+                    // Boss死亡奖励
+                    this.createBossReward(enemy.x, enemy.y);
+                }
+            }
+        ];
+
+        // 初始化时检查并创建必要的动画
+        this.createEnemyAnimations();
+    }
+    
+    // 创建敌人所需的动画 - 新增方法
+    createEnemyAnimations() {
+        // 检查动画是否已存在
+        if (!this.scene.anims.exists('enemyWalk')) {
+            // 尝试创建基本动画
+            try {
+                this.scene.anims.create({
+                    key: 'enemyWalk',
+                    frames: this.scene.anims.generateFrameNumbers('enemy', { start: 0, end: 3 }),
+                    frameRate: 10,
+                    repeat: -1
+                });
+                
+                console.log("成功创建enemyWalk动画");
+            } catch (e) {
+                console.warn("创建enemyWalk动画失败:", e.message);
+                // 如果精灵表有问题，创建一个单帧动画作为备用
+                try {
+                    this.scene.anims.create({
+                        key: 'enemyWalk',
+                        frames: [ { key: 'enemy', frame: 0 } ],
+                        frameRate: 1,
+                        repeat: 0
+                    });
+                } catch (e) {
+                    console.error("创建备用enemyWalk动画也失败:", e.message);
+                }
+            }
+        }
+
+        // 方向性动画
+        if (!this.scene.anims.exists('enemyWalkLeft')) {
+            try {
+                this.scene.anims.create({
+                    key: 'enemyWalkLeft',
+                    frames: this.scene.anims.generateFrameNumbers('enemy', { start: 0, end: 3 }),
+                    frameRate: 10,
+                    repeat: -1
+                });
+            } catch (e) {
+                console.warn("创建enemyWalkLeft动画失败:", e.message);
+            }
+        }
+
+        if (!this.scene.anims.exists('enemyWalkRight')) {
+            try {
+                this.scene.anims.create({
+                    key: 'enemyWalkRight',
+                    frames: this.scene.anims.generateFrameNumbers('enemy', { start: 0, end: 3 }),
+                    frameRate: 10,
+                    repeat: -1
+                });
+            } catch (e) {
+                console.warn("创建enemyWalkRight动画失败:", e.message);
+            }
+        }
+    }
+    
+    setWaveParameters(waveNumber, enemyCount) {
+        this.waveActive = true;
+        this.currentWave = waveNumber;
+        this.enemiesRemaining = enemyCount;
+        this.killedEnemiesCount = 0;
+        
+        // 调整敌人生成参数
+        this.spawnTime = this.scene.time.now + 1000; // 第一个敌人1秒后生成
+    }
+    
+    getEnemyTypeByWave(wave) {
+        // 根据波次调整敌人类型的权重
+        let weights = [...this.enemyTypes.map(t => t.spawnWeight)];
+        
+        // 随着波次增加，特殊敌人的比例增加
+        if (wave >= 3) { // 从第3波开始
+            weights[1] += 5; // 爆炸型
+            weights[2] += 5; // 分裂型
+        }
+        
+        if (wave >= 5) { // 从第5波开始
+            weights[3] += 10; // 精英型
+            weights[4] += 5; // 隐形型
+        }
+        
+        if (wave >= 7) { // 从第7波开始
+            weights[5] += 5; // 治疗型
+        }
+        
+        // 计算总权重
+        const totalWeight = weights.reduce((a, b) => a + b, 0);
+        
+        // 随机选择一种敌人类型
+        let random = Math.random() * totalWeight;
+        let cumulativeWeight = 0;
+        
+        for (let i = 0; i < weights.length; i++) {
+            cumulativeWeight += weights[i];
+            if (random <= cumulativeWeight) {
+                return this.enemyTypes[i];
+            }
+        }
+        
+        // 默认返回普通敌人
+        return this.enemyTypes[0];
     }
     
     spawnEnemy() {
+        // 如果波次系统激活，且没有剩余敌人，则不生成新敌人
+        if (this.waveActive && this.enemiesRemaining <= 0) {
+            return null;
+        }
+        
         // 确定生成位置 - 在玩家周围随机位置，但不要太近
         let x, y, distance;
         do {
@@ -32,47 +268,43 @@ export class EnemyManager {
             distance = Phaser.Math.Distance.Between(this.player.sprite.x, this.player.sprite.y, x, y);
         } while (distance < 500);
 
-        // 确定敌人类型 (0=普通, 1=精英, 2=Boss)
-        let enemyType;
-        const typeRoll = Phaser.Math.Between(0, 100);
-        if (typeRoll < 75) enemyType = 0;      // 75% 普通敌人
-        else if (typeRoll < 95) enemyType = 1; // 20% 精英敌人
-        else enemyType = 2;                   // 5% Boss敌人
-
-        // 确定攻击类型
-        const attackTypes = ['melee', 'range', 'suicide', 'teleport'];
-        const attackType = attackTypes[Phaser.Math.Between(0, attackTypes.length - 1)];
-
+        // 确定敌人类型
+        const enemyTypeConfig = this.getEnemyTypeByWave(this.currentWave);
+        return this.spawnEnemyAt(x, y, enemyTypeConfig.type);
+    }
+    
+    spawnEnemyAt(x, y, enemyType, scaleMultiplier = 1.0) {
+        const enemyTypeConfig = this.enemyTypes.find(t => t.type === enemyType) || this.enemyTypes[0];
+        
         // 创建敌人
         const enemy = this.enemies.create(x, y, 'enemy');
-        enemy.type = enemyType;
+        enemy.enemyType = enemyType;
+        enemy.typeConfig = enemyTypeConfig;
         
-        // 设置敌人生命值
-        if (enemyType === 0) enemy.health = 3;       // 普通敌人
-        else if (enemyType === 1) enemy.health = 8;  // 精英敌人
-        else enemy.health = 15;                     // Boss敌人
-        
-        // 设置敌人大小和颜色
-        enemy.setScale(enemyType === 0 ? 1.0 : (enemyType === 1 ? 1.3 : 1.8));
-        
-        if (enemyType === 0) enemy.setTint(0xffffff);        // 普通敌人：白色
-        else if (enemyType === 1) enemy.setTint(0xff8800);   // 精英敌人：橙色
-        else enemy.setTint(0xff0000);                       // Boss敌人：红色
-        
+        // 设置敌人属性
+        enemy.health = enemyTypeConfig.health;
+        enemy.maxHealth = enemyTypeConfig.health;
+        enemy.setScale(enemyTypeConfig.scale * scaleMultiplier);
+        enemy.setTint(enemyTypeConfig.color);
         enemy.body.setSize(enemy.width * 0.7, enemy.height * 0.7);
-
+        
         // 设置攻击类型
-        enemy.attackType = attackType;
+        enemy.attackType = enemyTypeConfig.attackType || 'melee';
         enemy.lastAttack = 0;
         enemy.lastTeleport = 0;
-
-        // 播放动画
-        enemy.play('enemyWalk');
+        enemy.attackInterval = enemyTypeConfig.attackInterval || 2000;
+        
+        // 修改: 安全地播放动画
+        this.playEnemyAnimation(enemy, 'enemyWalk');
 
         // 设置敌人运动属性
         enemy.wanderTime = 0;
         enemy.wanderVelocityX = 0;
         enemy.wanderVelocityY = 0;
+        
+        // 附加特殊行为
+        enemy.behavior = enemyTypeConfig.behavior;
+        enemy.onDeath = enemyTypeConfig.onDeath;
         
         // 敌人出现特效
         const spawnEffect = this.scene.add.image(x, y, 'soul')
@@ -90,12 +322,61 @@ export class EnemyManager {
             }
         });
         
+        // 更新剩余敌人数量
+        if (this.waveActive) {
+            this.enemiesRemaining--;
+        }
+        
         return enemy;
+    }
+    
+    // 新增: 安全播放敌人动画的方法
+    playEnemyAnimation(enemy, animationKey) {
+        // 检查动画是否存在
+        if (this.scene.anims.exists(animationKey)) {
+            try {
+                enemy.play(animationKey);
+            } catch (e) {
+                console.warn(`播放动画 ${animationKey} 失败:`, e.message);
+                // 发生错误时设置为默认帧
+                try {
+                    enemy.setTexture('enemy', 0);
+                } catch (err) {
+                    console.error("无法设置默认帧:", err.message);
+                }
+            }
+        } else {
+            console.warn(`动画 ${animationKey} 不存在，使用静态图像`);
+            try {
+                // 设置为默认帧
+                enemy.setTexture('enemy', 0);
+            } catch (err) {
+                console.error("无法设置默认帧:", err.message);
+            }
+        }
+    }
+    
+    spawnBossEnemy() {
+        // 在玩家前方生成Boss敌人
+        const bossDistance = 300;
+        const angle = Math.random() * Math.PI * 2; // 随机角度
+        
+        const x = this.player.sprite.x + Math.cos(angle) * bossDistance;
+        const y = this.player.sprite.y + Math.sin(angle) * bossDistance;
+        
+        // 生成Boss
+        const bossConfig = this.enemyTypes.find(t => t.type === 'boss');
+        const boss = this.spawnEnemyAt(x, y, 'boss');
+        
+        // 添加Boss警示和特效
+        this.createBossWarning(x, y);
+        
+        return boss;
     }
     
     update(time) {
         // 处理敌人生成
-        if (time > this.spawnTime) {
+        if (time > this.spawnTime && (!this.waveActive || this.enemiesRemaining > 0)) {
             this.spawnEnemy();
             this.spawnTime = time + Phaser.Math.Between(1000, 3000);
         }
@@ -103,13 +384,18 @@ export class EnemyManager {
         // 更新所有敌人的行为
         this.enemies.getChildren().forEach(enemy => {
             this.updateEnemyBehavior(enemy, time);
+            
+            // 执行特殊行为
+            if (enemy.behavior) {
+                enemy.behavior(enemy, time);
+            }
         });
     }
     
     updateEnemyBehavior(enemy, time) {
-        // 确保动画播放
-        if (!enemy.anims.isPlaying) {
-            enemy.play('enemyWalk');
+        // 修改: 安全地检查动画状态
+        if (enemy.anims && !enemy.anims.isPlaying) {
+            this.playEnemyAnimation(enemy, 'enemyWalk');
         }
 
         // 简单的追踪AI
@@ -119,7 +405,7 @@ export class EnemyManager {
         );
 
         if (distance < 500) {
-            let speed = 100 + (enemy.type * 30);
+            let speed = enemy.typeConfig.speed || 100;
 
             // 计算方向向量
             const dx = this.player.sprite.x - enemy.x;
@@ -132,17 +418,17 @@ export class EnemyManager {
                 dy / magnitude * speed
             );
 
-            // 设置敌人朝向
+            // 修改: 安全地设置敌人朝向和动画
             if (dx < 0) {
-                enemy.anims.play('enemyWalkLeft', true);
+                this.playEnemyAnimation(enemy, 'enemyWalkLeft');
                 enemy.flipX = true;
             } else {
-                enemy.anims.play('enemyWalkRight', true);
+                this.playEnemyAnimation(enemy, 'enemyWalkRight');
                 enemy.flipX = false;
             }
 
             // 精英敌人的特殊行为
-            if (enemy.type === 1 && Phaser.Math.Between(0, 100) < 1) {
+            if (enemy.enemyType === 'elite' && Phaser.Math.Between(0, 100) < 1) {
                 // 随机冲刺
                 enemy.body.setVelocity(
                     dx / magnitude * speed * 3,
@@ -153,19 +439,18 @@ export class EnemyManager {
             // 远程攻击
             if (enemy.attackType === 'range' && time > enemy.lastAttack) {
                 this.fireEnemyBullet(enemy);
-                enemy.lastAttack = time + 2000; // 攻击间隔
+                enemy.lastAttack = time + enemy.attackInterval; // 攻击间隔
             }
 
             // 自爆攻击
             if (enemy.attackType === 'suicide' && distance < 100) {
-                // 自爆逻辑由碰撞系统处理
-                // 这里可以添加自爆前的动画或特效
+                // 自爆逻辑在碰撞中处理
             }
 
             // 瞬移攻击
             if (enemy.attackType === 'teleport' && time > enemy.lastTeleport) {
                 this.teleportEnemy(enemy);
-                enemy.lastTeleport = time + 3000; // 瞬移间隔
+                enemy.lastTeleport = time + enemy.attackInterval; // 瞬移间隔
             }
 
         } else {
@@ -179,12 +464,12 @@ export class EnemyManager {
 
             enemy.body.setVelocity(enemy.wanderVelocityX, enemy.wanderVelocityY);
             
-            // 设置敌人朝向
+            // 修改: 安全地设置敌人漫游动画
             if (enemy.wanderVelocityX < 0) {
-                enemy.anims.play('enemyWalkLeft', true);
+                this.playEnemyAnimation(enemy, 'enemyWalkLeft');
                 enemy.flipX = true;
             } else {
-                enemy.anims.play('enemyWalkRight', true);
+                this.playEnemyAnimation(enemy, 'enemyWalkRight');
                 enemy.flipX = false;
             }
         }
@@ -276,7 +561,21 @@ export class EnemyManager {
     }
     
     damageEnemy(enemy, damage) {
-        enemy.health -= damage;
+        // 检查是否有暴击技能
+        let finalDamage = damage;
+        let isCritical = false;
+        
+        if (this.scene.passiveSkillSystem && this.scene.passiveSkillSystem.hasSkill('criticalHit')) {
+            if (Math.random() < 0.1) { // 10% 暴击几率
+                finalDamage *= 2;
+                isCritical = true;
+            }
+        }
+        
+        enemy.health -= finalDamage;
+        
+        // 显示伤害数字
+        this.showDamageNumber(enemy, finalDamage, isCritical);
         
         // 敌人受伤闪烁效果
         this.scene.tweens.add({
@@ -289,8 +588,33 @@ export class EnemyManager {
             }
         });
         
-        // 返回敌人是否死亡
-        return enemy.health <= 0;
+        // 如果敌人死亡
+        if (enemy.health <= 0) {
+            // 执行死亡回调
+            if (enemy.onDeath) {
+                enemy.onDeath(enemy);
+            }
+            
+            // 敌人死亡计数
+            this.killedEnemiesCount++;
+            this.totalKilledEnemies++;
+            
+            // 通知游戏场景更新击杀统计
+            this.scene.enemyKilled();
+            
+            // 检查是否有特殊成就
+            if (this.scene.waveSystem && this.scene.waveSystem.isWaveActive()) {
+                // 检查是否是完美波次（没有受伤）
+                if (!this.scene.player.hasBeenDamaged && this.killedEnemiesCount >= this.scene.waveSystem.getEnemiesForCurrentWave()) {
+                    this.scene.achievementSystem.checkAchievement('perfectWave', true);
+                }
+            }
+            
+            // 返回敌人已死亡
+            return true;
+        }
+        
+        return false;
     }
     
     destroyEnemy(enemy) {
@@ -343,34 +667,249 @@ export class EnemyManager {
         }
     }
     
-    getEnemySoulValue(enemy) {
-        // 根据敌人类型返回魂点值
-        if (enemy.type === 0) {
-            // 普通敌人: 1-3点
-            return Phaser.Math.Between(1, 3); 
-        } else if (enemy.type === 1) {
-            // 精英敌人: 3-7点
-            return Phaser.Math.Between(3, 7);
-        } else {
-            // Boss敌人: 7-12点
-            return Phaser.Math.Between(7, 12);
+    createExplosion(x, y, radius, damage) {
+        // 视觉效果 - 爆炸圆环
+        const explosionCircle = this.scene.add.circle(x, y, radius, 0xff5500, 0.3);
+        
+        // 找到范围内的玩家和敌人
+        const playerDistance = Phaser.Math.Distance.Between(x, y, this.player.sprite.x, this.player.sprite.y);
+        
+        // 如果玩家在爆炸范围内，造成伤害
+        if (playerDistance < radius) {
+            this.player.damage(damage, {x, y});
+            
+            // 击退玩家
+            this.player.knockback(x, y, 300);
+        }
+        
+        // 对范围内的其他敌人也造成伤害
+        const nearbyEnemies = this.getNearbyEnemies(x, y, radius);
+        nearbyEnemies.forEach(nearbyEnemy => {
+            this.damageEnemy(nearbyEnemy, damage / 2); // 对其他敌人造成一半伤害
+        });
+        
+        // 爆炸动画
+        this.scene.tweens.add({
+            targets: explosionCircle,
+            alpha: 0,
+            scale: 1.5,
+            duration: 500,
+            onComplete: function() {
+                explosionCircle.destroy();
+            }
+        });
+        
+        // 爆炸粒子效果
+        const particles = this.scene.add.particles(x, y, 'particle', {
+            tint: 0xff5500,
+            scale: { start: 0.5, end: 0.1 },
+            speed: { min: 50, max: 150 },
+            lifespan: 800,
+            blendMode: 'ADD',
+            frequency: -1
+        });
+        
+        particles.explode(30);
+        
+        // 3秒后自动销毁粒子
+        this.scene.time.delayedCall(3000, () => {
+            particles.destroy();
+        });
+    }
+    
+    createHealEffect(sourceX, sourceY, targetX, targetY) {
+        // 创建从治疗者到目标的连线
+        const healLine = this.scene.add.graphics();
+        healLine.lineStyle(2, 0x00ff00, 0.7);
+        healLine.beginPath();
+        healLine.moveTo(sourceX, sourceY);
+        healLine.lineTo(targetX, targetY);
+        healLine.closePath();
+        healLine.strokePath();
+        
+        // 在目标处创建治疗特效
+        const healEffect = this.scene.add.image(targetX, targetY, 'particle')
+            .setScale(0.5)
+            .setAlpha(0.7)
+            .setTint(0x00ff00);
+            
+        // 特效动画
+        this.scene.tweens.add({
+            targets: [healLine],
+            alpha: 0,
+            duration: 500,
+            onComplete: function() {
+                healLine.destroy();
+            }
+        });
+        
+        this.scene.tweens.add({
+            targets: healEffect,
+            scale: 1,
+            alpha: 0,
+            duration: 500,
+            onComplete: function() {
+                healEffect.destroy();
+            }
+        });
+    }
+    
+    createBossWarning(x, y) {
+        // 创建Boss警告标记
+        const warningText = this.scene.add.text(
+            x, 
+            y - 50, 
+            'BOSS!', 
+            {
+                fontSize: '32px',
+                fontStyle: 'bold',
+                fill: '#ff0000',
+                stroke: '#000000',
+                strokeThickness: 6
+            }
+        ).setOrigin(0.5);
+        
+        // 警告标记动画
+        this.scene.tweens.add({
+            targets: warningText,
+            y: y - 80,
+            alpha: 0,
+            duration: 1500,
+            onComplete: function() {
+                warningText.destroy();
+            }
+        });
+        
+        // 地面波纹效果
+        const circle = this.scene.add.circle(x, y, 100, 0xff0000, 0.3);
+        
+        this.scene.tweens.add({
+            targets: circle,
+            scale: 2,
+            alpha: 0,
+            duration: 1000,
+            onComplete: function() {
+                circle.destroy();
+            }
+        });
+    }
+    
+    createBossReward(x, y) {
+        // Boss死亡奖励
+        // 1. 大量魂点
+        for (let i = 0; i < 20; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const distance = Math.random() * 100;
+            const offsetX = Math.cos(angle) * distance;
+            const offsetY = Math.sin(angle) * distance;
+            
+            // 生成高品质魂点
+            const soulType = Math.random() < 0.5 ? 2 : 3; // 50%史诗, 50%传说
+            this.scene.itemSystem.spawnSoul(x + offsetX, y + offsetY, soulType);
+        }
+        
+        // 2. 随机元素效果
+        if (this.scene.elementSystem) {
+            const randomElement = this.scene.elementSystem.getRandomElement();
+            this.scene.elementSystem.setActiveElement(randomElement.id);
+            
+            // 显示元素获取消息
+            const elementText = this.scene.add.text(
+                x, 
+                y - 50, 
+                `获得 ${randomElement.name} 元素!`, 
+                {
+                    fontSize: '24px',
+                    fill: '#' + randomElement.color.toString(16).padStart(6, '0'),
+                    stroke: '#000000',
+                    strokeThickness: 4
+                }
+            ).setOrigin(0.5);
+            
+            this.scene.tweens.add({
+                targets: elementText,
+                y: y - 100,
+                alpha: 0,
+                duration: 2000,
+                onComplete: function() {
+                    elementText.destroy();
+                }
+            });
+            
+            // 检查元素成就
+            const usedElements = this.scene.registry.get('usedElements') || [];
+            if (!usedElements.includes(randomElement.id)) {
+                usedElements.push(randomElement.id);
+                this.scene.registry.set('usedElements', usedElements);
+                this.scene.achievementSystem.checkAchievement('useElements', usedElements.length);
+            }
         }
     }
     
-    getEnemySoulType(enemy) {
-        // 根据敌人类型确定魂点类型
-        if (enemy.type === 0) {
-            // 普通敌人: 90%普通魂点, 10%稀有魂点
-            return (Phaser.Math.Between(0, 10) < 9) ? 0 : 1;
-        } else if (enemy.type === 1) {
-            // 精英敌人: 60%稀有魂点, 40%史诗魂点
-            return (Phaser.Math.Between(0, 10) < 6) ? 1 : 2;
-        } else {
-            // Boss敌人: 40%稀有魂点, 40%史诗魂点, 20%传说魂点
-            const roll = Phaser.Math.Between(0, 10);
-            if (roll < 4) return 1;
-            else if (roll < 8) return 2;
-            else return 3;
+    showDamageNumber(enemy, damage, isCritical = false) {
+        const color = isCritical ? '#ff0000' : '#ffffff';
+        const fontSize = isCritical ? '22px' : '16px';
+        const text = isCritical ? damage + '!' : damage.toString();
+        
+        const damageText = this.scene.add.text(
+            enemy.x, 
+            enemy.y - 20, 
+            text, 
+            {
+                fontSize: fontSize,
+                fill: color,
+                stroke: '#000000',
+                strokeThickness: 2,
+                fontStyle: isCritical ? 'bold' : 'normal'
+            }
+        ).setOrigin(0.5);
+        
+        this.scene.tweens.add({
+            targets: damageText,
+            y: enemy.y - 40,
+            alpha: 0,
+            duration: 800,
+            onComplete: function() {
+                damageText.destroy();
+            }
+        });
+    }
+    
+    getNearbyEnemies(x, y, radius, maxCount = Infinity, excludeList = []) {
+        const nearbyEnemies = [];
+        
+        this.enemies.getChildren().forEach(enemy => {
+            if (excludeList.includes(enemy)) return;
+            
+            const distance = Phaser.Math.Distance.Between(x, y, enemy.x, enemy.y);
+            if (distance < radius) {
+                nearbyEnemies.push({
+                    enemy,
+                    distance
+                });
+            }
+        });
+        
+        // 按距离排序
+        nearbyEnemies.sort((a, b) => a.distance - b.distance);
+        
+        // 只返回最近的maxCount个敌人
+        return nearbyEnemies.slice(0, maxCount).map(item => item.enemy);
+    }
+    
+    getKilledEnemiesCount() {
+        return this.killedEnemiesCount;
+    }
+    
+    resetKilledEnemiesCount() {
+        this.killedEnemiesCount = 0;
+    }
+    
+    getEnemiesForCurrentWave() {
+        // 返回当前波次应该生成的敌人数量
+        if (this.scene.waveSystem) {
+            return this.scene.waveSystem.getEnemiesRemaining() + this.killedEnemiesCount;
         }
+        return 0;
     }
 }

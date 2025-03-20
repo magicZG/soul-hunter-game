@@ -9,6 +9,7 @@ export class ItemSystem {
         
         this.nextChestThreshold = 50; // 初始宝箱出现阈值
         this.chestSpawnTimer = 0;
+        this.soulCollectRadius = 150; // 初始收集范围
 
         // 初始化陷阱
         this.initTraps();
@@ -132,7 +133,8 @@ export class ItemSystem {
                 soul.x, soul.y
             );
 
-            const collectRadius = 150; // 收集范围
+            // 应用魂点磁铁技能的收集范围
+            const collectRadius = this.soulCollectRadius;
 
             if (distance < collectRadius) {
                 // 计算方向向量
@@ -159,7 +161,63 @@ export class ItemSystem {
     }
     
     getCollectedSoulValue(soul) {
-        return soul.value || 1;
+        // 检查是否有幸运值技能
+        let value = soul.value || 1;
+        
+        if (this.scene.passiveSkillSystem && this.scene.passiveSkillSystem.hasSkill('luckyFinder')) {
+            // 15%概率获得额外魂点
+            if (Math.random() < 0.15) {
+                value += 1;
+                this.showLuckyBonus(soul.x, soul.y);
+            }
+        }
+        
+        return value;
+    }
+    
+    showLuckyBonus(x, y) {
+        const bonusText = this.scene.add.text(
+            x, y - 30, 
+            '+1 幸运!', 
+            {
+                fontSize: '16px',
+                fill: '#ffff00',
+                stroke: '#000000',
+                strokeThickness: 2
+            }
+        ).setOrigin(0.5);
+        
+        this.scene.tweens.add({
+            targets: bonusText,
+            y: y - 60,
+            alpha: 0,
+            duration: 1000,
+            onComplete: function() {
+                bonusText.destroy();
+            }
+        });
+    }
+    
+    increaseSoulCollectRadius(multiplier) {
+        this.soulCollectRadius *= multiplier;
+        
+        // 显示范围增加效果
+        const radiusEffect = this.scene.add.circle(
+            this.player.sprite.x,
+            this.player.sprite.y,
+            this.soulCollectRadius,
+            0x0000ff,
+            0.2
+        );
+        
+        this.scene.tweens.add({
+            targets: radiusEffect,
+            alpha: 0,
+            duration: 1000,
+            onComplete: function() {
+                radiusEffect.destroy();
+            }
+        });
     }
     
     createSoulCollectEffect(soul) {
@@ -272,148 +330,195 @@ export class ItemSystem {
                     .setScale(0.5 + Math.random() * 0.5)
                     .setDepth(4);
                     
+                this.scene.tweens.add({
+                    targets: particle,
+                    x: chest.x + Math.cos(angle) * distance,
+                    y: chest.y + Math.sin(angle) * distance,
+                    alpha: 0,
+                    scale: 0.1,
+                    duration: 1000 + Math.random() * 500,
+                    onComplete: function() {
+                        particle.destroy();
+                    }
+                });
+            }
+            
+            // 考虑幸运值技能对宝箱内容的影响
+            let rewardType = Phaser.Math.Between(0, 3);
+            
+            // 如果有幸运值技能，增加获得稀有奖励的几率
+            if (this.scene.passiveSkillSystem && this.scene.passiveSkillSystem.hasSkill('luckyFinder')) {
+                if (Math.random() < 0.15) { // 15%几率获得更好的奖励
+                    rewardType = Math.min(3, rewardType + 1);
+                }
+            }
+            
+            return rewardType; // 返回奖励类型以便处理
+        }
+        
+        return -1; // 已收集的宝箱
+    }
+    
+    processChestReward(chest, rewardType) {
+        switch (rewardType) {
+            case 0: // 魂点奖励
+                const soulReward = Phaser.Math.Between(20, 50);
+                
+                // 显示奖励文本
+                const rewardText = this.scene.add.text(chest.x, chest.y - 30, '+' + soulReward + ' 魂点!', {
+                    fontSize: '20px',
+                    fill: '#ffffff',
+                    stroke: '#000000',
+                    strokeThickness: 3
+                }).setOrigin(0.5);
+
+                this.scene.tweens.add({
+                    targets: rewardText,
+                    y: chest.y - 80,
+                    alpha: 0,
+                    duration: 1500,
+                    onComplete: function () {
+                        rewardText.destroy();
+                    }
+                });
+                
+                // 魂点飞向玩家的动画效果
+                for (let i = 0; i < 10; i++) {
+                    const delay = i * 70;
+                    const soulParticle = this.scene.add.image(
+                        chest.x + Phaser.Math.Between(-20, 20),
+                        chest.y + Phaser.Math.Between(-20, 20),
+                        'soul'
+                    )
+                    .setTint(0x00ff00)
+                    .setScale(0.4)
+                    .setDepth(5);
+                    
                     this.scene.tweens.add({
-                        targets: particle,
-                        x: chest.x + Math.cos(angle) * distance,
-                        y: chest.y + Math.sin(angle) * distance,
-                        alpha: 0,
+                        targets: soulParticle,
+                        x: this.player.sprite.x,
+                        y: this.player.sprite.y,
                         scale: 0.1,
-                        duration: 1000 + Math.random() * 500,
+                        delay: delay,
+                        duration: 500,
                         onComplete: function() {
-                            particle.destroy();
+                            soulParticle.destroy();
                         }
                     });
                 }
+                return { type: 'souls', value: soulReward };
                 
-                // 随机奖励类型
-                const rewardType = Phaser.Math.Between(0, 3);
-                return rewardType; // 返回奖励类型以便处理
-            }
-            
-            return -1; // 已收集的宝箱
-        }
-        
-        processChestReward(chest, rewardType) {
-            switch (rewardType) {
-                case 0: // 魂点奖励
-                    const soulReward = Phaser.Math.Between(20, 50);
-                    
-                    // 显示奖励文本
-                    const rewardText = this.scene.add.text(chest.x, chest.y - 30, '+' + soulReward + ' 魂点!', {
-                        fontSize: '20px',
-                        fill: '#ffffff',
-                        stroke: '#000000',
-                        strokeThickness: 3
-                    }).setOrigin(0.5);
-    
-                    this.scene.tweens.add({
-                        targets: rewardText,
-                        y: chest.y - 80,
-                        alpha: 0,
-                        duration: 1500,
-                        onComplete: function () {
-                            rewardText.destroy();
-                        }
-                    });
-                    
-                    // 魂点飞向玩家的动画效果
-                    for (let i = 0; i < 10; i++) {
-                        const delay = i * 70;
-                        const soulParticle = this.scene.add.image(
-                            chest.x + Phaser.Math.Between(-20, 20),
-                            chest.y + Phaser.Math.Between(-20, 20),
-                            'soul'
-                        )
-                        .setTint(0x00ff00)
-                        .setScale(0.4)
-                        .setDepth(5);
-                        
-                        this.scene.tweens.add({
-                            targets: soulParticle,
-                            x: this.player.sprite.x,
-                            y: this.player.sprite.y,
-                            scale: 0.1,
-                            delay: delay,
-                            duration: 500,
-                            onComplete: function() {
-                                soulParticle.destroy();
-                            }
-                        });
+            case 1: // 生命恢复
+                const healthReward = Phaser.Math.Between(30, 60);
+                
+                // 显示奖励文本
+                const healthText = this.scene.add.text(chest.x, chest.y - 30, '+' + healthReward + ' 生命!', {
+                    fontSize: '20px',
+                    fill: '#00ff00',
+                    stroke: '#000000',
+                    strokeThickness: 3
+                }).setOrigin(0.5);
+
+                this.scene.tweens.add({
+                    targets: healthText,
+                    y: chest.y - 80,
+                    alpha: 0,
+                    duration: 1500,
+                    onComplete: function () {
+                        healthText.destroy();
                     }
-                    return { type: 'souls', value: soulReward };
-                    
-                case 1: // 生命恢复
-                    const healthReward = Phaser.Math.Between(30, 60);
-                    
-                    // 显示奖励文本
-                    const healthText = this.scene.add.text(chest.x, chest.y - 30, '+' + healthReward + ' 生命!', {
-                        fontSize: '20px',
-                        fill: '#00ff00',
-                        stroke: '#000000',
-                        strokeThickness: 3
-                    }).setOrigin(0.5);
-    
-                    this.scene.tweens.add({
-                        targets: healthText,
-                        y: chest.y - 80,
-                        alpha: 0,
-                        duration: 1500,
-                        onComplete: function () {
-                            healthText.destroy();
-                        }
-                    });
-                    
-                    return { type: 'health', value: healthReward };
-                    
-                case 2: // 传说魂点
-                    // 生成5个传说魂点
-                    for (let i = 0; i < 5; i++) {
-                        this.spawnSoul(chest.x, chest.y, 3);
+                });
+                
+                return { type: 'health', value: healthReward };
+                
+            case 2: // 传说魂点
+                // 生成5个传说魂点
+                for (let i = 0; i < 5; i++) {
+                    this.spawnSoul(chest.x, chest.y, 3);
+                }
+                
+                // 显示奖励文本
+                const legendText = this.scene.add.text(chest.x, chest.y - 30, '传说魂点!', {
+                    fontSize: '24px',
+                    fill: '#ffa500',
+                    stroke: '#000000',
+                    strokeThickness: 3
+                }).setOrigin(0.5);
+
+                this.scene.tweens.add({
+                    targets: legendText,
+                    y: chest.y - 80,
+                    alpha: 0,
+                    duration: 1500,
+                    onComplete: function () {
+                        legendText.destroy();
                     }
-                    
-                    // 显示奖励文本
-                    const legendText = this.scene.add.text(chest.x, chest.y - 30, '传说魂点!', {
-                        fontSize: '24px',
-                        fill: '#ffa500',
-                        stroke: '#000000',
-                        strokeThickness: 3
-                    }).setOrigin(0.5);
-    
-                    this.scene.tweens.add({
-                        targets: legendText,
-                        y: chest.y - 80,
-                        alpha: 0,
-                        duration: 1500,
-                        onComplete: function () {
-                            legendText.destroy();
-                        }
-                    });
-                    
-                    return { type: 'legendSouls' };
-                    
-                case 3: // 临时武器升级
-                    let newWeapon = Phaser.Math.Between(0, 3);
+                });
+                
+                return { type: 'legendSouls' };
+                
+            case 3: // 临时元素效果
+                // 随机选择一个元素
+                if (this.scene.elementSystem) {
+                    const randomElement = this.scene.elementSystem.getRandomElement();
                     
                     // 显示临时升级提示
-                    const upgradeText = this.scene.add.text(chest.x, chest.y - 30, '临时武器升级!', {
-                        fontSize: '20px',
-                        fill: '#ffff00',
-                        stroke: '#000000',
-                        strokeThickness: 3
-                    }).setOrigin(0.5);
-    
+                    const elementText = this.scene.add.text(
+                        chest.x, 
+                        chest.y - 30, 
+                        '获得 ' + randomElement.name + ' 元素效果!', 
+                        {
+                            fontSize: '20px',
+                            fill: '#' + randomElement.color.toString(16).padStart(6, '0'),
+                            stroke: '#000000',
+                            strokeThickness: 3
+                        }
+                    ).setOrigin(0.5);
+
                     this.scene.tweens.add({
-                        targets: upgradeText,
+                        targets: elementText,
                         y: chest.y - 80,
                         alpha: 0,
                         duration: 1500,
                         onComplete: function () {
-                            upgradeText.destroy();
+                            elementText.destroy();
                         }
                     });
                     
-                    return { type: 'weaponUpgrade', value: newWeapon, duration: 45000 };
-            }
+                    // 应用元素效果
+                    return { 
+                        type: 'element', 
+                        value: randomElement.id,
+                        duration: 60000 // 60秒元素效果
+                    };
+                }
+                
+                // 没有元素系统时回退到临时武器升级
+                let newWeapon = Phaser.Math.Between(0, 3);
+                
+                // 显示临时升级提示
+                const upgradeText = this.scene.add.text(chest.x, chest.y - 30, '临时武器升级!', {
+                    fontSize: '20px',
+                    fill: '#ffff00',
+                    stroke: '#000000',
+                    strokeThickness: 3
+                }).setOrigin(0.5);
+
+                this.scene.tweens.add({
+                    targets: upgradeText,
+                    y: chest.y - 80,
+                    alpha: 0,
+                    duration: 1500,
+                    onComplete: function () {
+                        upgradeText.destroy();
+                    }
+                });
+                
+                return { 
+                    type: 'weaponUpgrade', 
+                    value: newWeapon, 
+                    duration: 45000 
+                };
         }
     }
-    
+}
